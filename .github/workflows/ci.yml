@@ -1,0 +1,51 @@
+# .github/workflows/ci.yml
+# Este arquivo YAML é o "cérebro" do pipeline de Integração Contínua.
+# Ele diz ao GitHub Actions o que fazer automaticamente sempre que
+# alguém envia código para o repositório.
+
+name: Pipeline de CI - ci-cd-nodejs-demo
+
+# Define QUANDO o pipeline deve rodar
+on:
+  push:
+    branches: ["main"] # roda em todo push direto na branch main
+  pull_request:
+    branches: ["main"] # roda em todo pull request que tenha main como alvo
+
+# Define os "trabalhos" (jobs) que o pipeline vai executar
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest # máquina virtual usada para rodar os passos
+
+    steps:
+      # 1. Baixa o código do repositório para a máquina virtual
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # 2. Configura o ambiente Node.js na versão desejada
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20" # mesma versão usada no Dockerfile
+          cache: "npm" # acelera builds futuras reaproveitando cache do npm
+
+      # 3. Instala todas as dependências do projeto (inclusive as de teste)
+      - name: Instalar dependências
+        run: npm install
+
+      # 4. Executa os testes automatizados (Jest). Se algum falhar, o pipeline para aqui.
+      - name: Rodar testes
+        run: npm test
+
+      # 5. Prepara o Docker Buildx (necessário para o passo de build da imagem)
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 6. Constrói a imagem Docker (sem enviar para nenhum registro, por enquanto)
+      - name: Build da imagem Docker
+        uses: docker/build-push-action@v5
+        with:
+          context: . # diretório usado como contexto do build
+          file: ./Dockerfile # caminho do Dockerfile
+          push: false # apenas constrói a imagem, não envia (push) a lugar nenhum
+          tags: ci-cd-nodejs-demo:latest # nome/tag dado à imagem gerada
