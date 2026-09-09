@@ -2,6 +2,11 @@
 # Este arquivo YAML é o "cérebro" do pipeline de Integração Contínua.
 # Ele diz ao GitHub Actions o que fazer automaticamente sempre que
 # alguém envia código para o repositório.
+#
+# A partir desta versão, o pipeline também PUBLICA a imagem Docker
+# no GitHub Container Registry (GHCR) — mas SOMENTE quando o push
+# for direto na branch "main" (ou seja, após um merge). Em Pull
+# Requests, a imagem é apenas construída (build), nunca publicada.
 
 name: Pipeline de CI - ci-cd-nodejs-demo
 
@@ -16,6 +21,14 @@ on:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest # máquina virtual usada para rodar os passos
+
+    # Permissões que este job precisa dentro do repositório.
+    # Por padrão o GITHUB_TOKEN só tem permissão de leitura;
+    # aqui liberamos escrita em "packages" para conseguir publicar
+    # a imagem Docker no GHCR.
+    permissions:
+      contents: read   # permissão para fazer checkout do código
+      packages: write  # permissão para FAZER PUSH de pacotes (imagem Docker)
 
     steps:
       # 1. Baixa o código do repositório para a máquina virtual
@@ -37,15 +50,40 @@ jobs:
       - name: Rodar testes
         run: npm test
 
-      # 5. Prepara o Docker Buildx (necessário para o passo de build da imagem)
+      # 5. Prepara o Docker Buildx (necessário para o passo de build/push da imagem)
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 6. Constrói a imagem Docker (sem enviar para nenhum registro, por enquanto)
-      - name: Build da imagem Docker
+      # 6. Loga no GitHub Container Registry (GHCR)
+      # Este step só roda se for um push na branch main (não roda em PR)
+      - name: Logar no GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} # Segredo automático do GitHub!
+
+      # 7. Extrai metadados (tags) para a imagem Docker
+      # Este step também só roda em push na branch main
+      - name: Extrair Metadados do Docker
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }} # ghcr.io/SEU_USUARIO/SEU_REPO
+          tags: |
+            type=sha
+            latest
+
+      # 8. Build (e, se for push na main, PUSH) da imagem Docker
+      # Em Pull Requests: só constrói a imagem, para validar que o build funciona.
+      # Em push na main: constrói E publica a imagem no GHCR.
+      - name: Build e Push da Imagem Docker
         uses: docker/build-push-action@v5
         with:
           context: . # diretório usado como contexto do build
           file: ./Dockerfile # caminho do Dockerfile
-          push: false # apenas constrói a imagem, não envia (push) a lugar nenhum
-          tags: ci-cd-nodejs-demo:latest # nome/tag dado à imagem gerada
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags || 'ci-cd-nodejs-demo:latest' }}
+          labels: ${{ steps.meta.outputs.labels }}
