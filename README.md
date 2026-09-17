@@ -79,3 +79,7 @@ base para pipelines de Entrega Contínua (CD), que automatizam o deploy
 em produção. Por fim, reduz o retrabalho e o risco de erro humano em
 tarefas repetitivas — como rodar testes e gerar builds — liberando a
 equipe para focar no desenvolvimento de funcionalidades.
+
+## Em quais situações essa abordagem com CD pode ser útil dentro de uma empresa
+
+Numa empresa real, ninguém quer ficar esperando alguém logar no servidor pra atualizar o sistema toda vez que uma correção é aprovada. É exatamente esse gargalo que o CD resolve: assim que o código passa pelos testes e é aprovado na branch principal, ele já vai pro ar sozinho — sem intervenção manual, sem esquecimento de passo, sem depender de quem está de plantão naquele dia. Isso importa muito em times que lançam mudanças com frequência (correções de bug, pequenos ajustes, novas features), porque o tempo entre "aprovar a mudança" e "usuário final usando ela" cai de horas ou dias para minutos. E tem outro ganho, menos óbvio: como cada deploy fica atrelado a um commit e a uma execução de pipeline específica, dá pra rastrear exatamente o que mudou e quando, o que ajuda muito na hora de investigar um problema em produção.
