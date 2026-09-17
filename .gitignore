@@ -1,2 +1,5 @@
 node_modules
 npm-debug.log
+
+# Pasta criada pelo GitHub Self-hosted Runner (não deve ir para o repositório)
+/actions-runner
