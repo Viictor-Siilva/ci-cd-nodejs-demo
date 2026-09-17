@@ -1,0 +1,7 @@
+services:
+  app:
+    image: ghcr.io/viictor-siilva/ci-cd-nodejs-demo:latest
+    ports:
+      - "3000:3000"
+    restart: always
+    pull_policy: always

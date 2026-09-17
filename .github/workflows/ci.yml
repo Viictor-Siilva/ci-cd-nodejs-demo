@@ -87,3 +87,39 @@ jobs:
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags || 'ci-cd-nodejs-demo:latest' }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # ==========================================================
+  # JOB 2: DEPLOY (Implantação Contínua - CD)
+  # Este job faz o deploy da imagem publicada pelo Job 1,
+  # rodando na SUA MÁQUINA através de um self-hosted runner.
+  # ==========================================================
+  deploy-to-local:
+    # Este job SÓ RODA se for um push na 'main' (ou seja, após um merge)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    # Depende do Job 1: só roda se os testes e o build/push terminarem com sucesso
+    needs: test-and-build
+
+    # Roda no seu PC (onde o self-hosted runner está "ouvindo" por jobs)
+    runs-on: self-hosted
+
+    steps:
+      # 1. Pega o código (necessário para ter o docker-compose.yml na máquina)
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+
+      # 2. Loga no GHCR (para conseguir BAIXAR a imagem publicada)
+      - name: Logar no GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 3. Executa o deploy: baixa a imagem nova, sobe o contêiner e limpa imagens antigas
+      - name: Fazer Deploy com Docker Compose
+        run: |
+          docker compose pull
+          docker compose up -d --no-build
+          docker image prune -f
+
