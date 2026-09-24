@@ -19,7 +19,7 @@ describe("Rota /", () => {
     expect(response.statusCode).toBe(200);
 
     // Verifica se o texto retornado é exatamente o esperado
-    expect(response.text).toBe("Olá Mundo DevOps!");
+    expect(response.text).toBe("Olá Mundo DevSecOps!");
   });
 });
 
