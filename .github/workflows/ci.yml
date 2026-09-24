@@ -51,13 +51,8 @@ jobs:
 
       # Container Scan: falha se houver vulnerabilidade CRITICAL
       - name: Escanear imagem com Trivy (Container Scan)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: ci-cd-nodejs-demo:scan
-          format: table
-          severity: CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity CRITICAL --exit-code 1 --ignore-unfixed ci-cd-nodejs-demo:scan
 
       - name: Logar no GitHub Container Registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
