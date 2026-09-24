@@ -11,7 +11,7 @@ const app = express(); // instância da aplicação Express
 // Quando alguém acessa a raiz do site, respondemos com uma mensagem simples
 // e o status HTTP 200 (que significa "sucesso").
 app.get("/", (req, res) => {
- res.status(200).send("Olá Mundo DevOps!");
+  res.status(200).send("Olá Mundo DevSecOps!");
 });
 
 // Rota de healthcheck (GET /status)

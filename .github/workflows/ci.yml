@@ -1,114 +1,97 @@
-# .github/workflows/ci.yml
-# Este arquivo YAML é o "cérebro" do pipeline de Integração Contínua.
-# Ele diz ao GitHub Actions o que fazer automaticamente sempre que
-# alguém envia código para o repositório.
-#
-# A partir desta versão, o pipeline também PUBLICA a imagem Docker
-# no GitHub Container Registry (GHCR) — mas SOMENTE quando o push
-# for direto na branch "main" (ou seja, após um merge). Em Pull
-# Requests, a imagem é apenas construída (build), nunca publicada.
-
 name: Pipeline de CI - ci-cd-nodejs-demo
 
-# Define QUANDO o pipeline deve rodar
 on:
   push:
-    branches: ["main"] # roda em todo push direto na branch main
+    branches: ["main"]
   pull_request:
-    branches: ["main"] # roda em todo pull request que tenha main como alvo
+    branches: ["main"]
 
-# Define os "trabalhos" (jobs) que o pipeline vai executar
 jobs:
   test-and-build:
-    runs-on: ubuntu-latest # máquina virtual usada para rodar os passos
+    runs-on: ubuntu-latest
 
-    # Permissões que este job precisa dentro do repositório.
-    # Por padrão o GITHUB_TOKEN só tem permissão de leitura;
-    # aqui liberamos escrita em "packages" para conseguir publicar
-    # a imagem Docker no GHCR.
     permissions:
-      contents: read   # permissão para fazer checkout do código
-      packages: write  # permissão para FAZER PUSH de pacotes (imagem Docker)
+      contents: read
+      packages: write
 
     steps:
-      # 1. Baixa o código do repositório para a máquina virtual
-      - name: Checkout do código
+      - name: Checkout do codigo
         uses: actions/checkout@v4
 
-      # 2. Configura o ambiente Node.js na versão desejada
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20" # mesma versão usada no Dockerfile
-          cache: "npm" # acelera builds futuras reaproveitando cache do npm
+          node-version: "20"
+          cache: "npm"
 
-      # 3. Instala todas as dependências do projeto (inclusive as de teste)
-      - name: Instalar dependências
+      - name: Instalar dependencias
         run: npm install
 
-      # 4. Executa os testes automatizados (Jest). Se algum falhar, o pipeline para aqui.
       - name: Rodar testes
         run: npm test
 
-      # 5. Prepara o Docker Buildx (necessário para o passo de build/push da imagem)
+      # SCA: falha se houver vulnerabilidade HIGH ou CRITICAL nas dependencias
+      - name: Verificar vulnerabilidades de dependencias (SCA)
+        run: npm audit --audit-level=high
+
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 6. Loga no GitHub Container Registry (GHCR)
-      # Este step só roda se for um push na branch main (não roda em PR)
+      # Build local (sem publicar) para poder escanear a imagem
+      - name: Build da imagem Docker (para escaneamento)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          push: false
+          tags: ci-cd-nodejs-demo:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Container Scan: falha se houver vulnerabilidade CRITICAL
+      - name: Escanear imagem com Trivy (Container Scan)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity CRITICAL --exit-code 1 --ignore-unfixed ci-cd-nodejs-demo:scan
+
       - name: Logar no GitHub Container Registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }} # Segredo automático do GitHub!
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7. Extrai metadados (tags) para a imagem Docker
-      # Este step também só roda em push na branch main
       - name: Extrair Metadados do Docker
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }} # ghcr.io/SEU_USUARIO/SEU_REPO
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=sha
-            latest
+            type=raw,value=latest
 
-      # 8. Build (e, se for push na main, PUSH) da imagem Docker
-      # Em Pull Requests: só constrói a imagem, para validar que o build funciona.
-      # Em push na main: constrói E publica a imagem no GHCR.
-      - name: Build e Push da Imagem Docker
+      - name: Push da Imagem Docker
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v5
         with:
-          context: . # diretório usado como contexto do build
-          file: ./Dockerfile # caminho do Dockerfile
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          tags: ${{ steps.meta.outputs.tags || 'ci-cd-nodejs-demo:latest' }}
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
 
-  # ==========================================================
-  # JOB 2: DEPLOY (Implantação Contínua - CD)
-  # Este job faz o deploy da imagem publicada pelo Job 1,
-  # rodando na SUA MÁQUINA através de um self-hosted runner.
-  # ==========================================================
   deploy-to-local:
-    # Este job SÓ RODA se for um push na 'main' (ou seja, após um merge)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    # Depende do Job 1: só roda se os testes e o build/push terminarem com sucesso
     needs: test-and-build
-
-    # Roda no seu PC (onde o self-hosted runner está "ouvindo" por jobs)
     runs-on: self-hosted
 
     steps:
-      # 1. Pega o código (necessário para ter o docker-compose.yml na máquina)
-      - name: Checkout do Código
+      - name: Checkout do Codigo
         uses: actions/checkout@v4
 
-      # 2. Loga no GHCR (para conseguir BAIXAR a imagem publicada)
       - name: Logar no GitHub Container Registry (GHCR)
         uses: docker/login-action@v3
         with:
@@ -116,10 +99,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. Executa o deploy: baixa a imagem nova, sobe o contêiner e limpa imagens antigas
       - name: Fazer Deploy com Docker Compose
         run: |
           docker compose pull
           docker compose up -d --no-build
           docker image prune -f
-

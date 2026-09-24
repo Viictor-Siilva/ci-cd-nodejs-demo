@@ -29,6 +29,8 @@ COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app .
 
 # Informa (documentação) que a aplicação escuta na porta 3000.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 EXPOSE 3000
 
 # Comando executado quando o container é iniciado.
